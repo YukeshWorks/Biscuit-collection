@@ -23,11 +23,13 @@ export function createInstagramClient({
 
   async function call(method, path, params = {}) {
     const url = new URL(base + path);
-    const init = { method, headers: { authorization: `Bearer ${accessToken}` } };
+    // access_token as a parameter, exactly as Meta's Graph API docs show it.
+    const all = { ...params, access_token: accessToken };
+    const init = { method };
     if (method === 'GET') {
-      for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+      for (const [k, v] of Object.entries(all)) url.searchParams.set(k, v);
     } else {
-      init.body = new URLSearchParams(params);
+      init.body = new URLSearchParams(all);
     }
     let res;
     try {

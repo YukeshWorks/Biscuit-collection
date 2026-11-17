@@ -9,13 +9,32 @@
 // If you put a different token in .env, it wins and the saved one is discarded.
 import { readFile, writeFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
 
 const DAY = 24 * 60 * 60 * 1000;
 const RENEW_WHEN_LEFT = 50 * DAY; // renew once the token has under 50 days left (~every 10 days)
 const MIN_GAP = DAY; // never try more than once a day
 
 const fingerprint = (t) => createHash('sha256').update(String(t)).digest('hex').slice(0, 16);
+
+// Optional at-rest encryption, for when token.json lives somewhere others can read
+// (e.g. a branch of a public GitHub repo). The key is derived from the token you
+// configured, so only someone who already holds that secret can decrypt the renewed one.
+function keyFrom(envToken) {
+  return Buffer.from(hkdfSync('sha256', String(envToken), 'biscuit-token-cache', 'v1', 32));
+}
+export function seal(plain, envToken) {
+  const iv = randomBytes(12);
+  const c = createCipheriv('aes-256-gcm', keyFrom(envToken), iv);
+  const body = Buffer.concat([c.update(plain, 'utf8'), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), body]).toString('base64');
+}
+export function unseal(sealed, envToken) {
+  const raw = Buffer.from(sealed, 'base64');
+  const d = createDecipheriv('aes-256-gcm', keyFrom(envToken), raw.subarray(0, 12));
+  d.setAuthTag(raw.subarray(12, 28));
+  return Buffer.concat([d.update(raw.subarray(28)), d.final()]).toString('utf8');
+}
 
 export async function createTokenManager({
   envToken,
@@ -25,6 +44,7 @@ export async function createTokenManager({
   now = () => Date.now(),
   onToken = () => {},
   log = console,
+  encrypt = false,
 }) {
   const file = join(dataDir, 'token.json');
   const canRenew = host === 'graph.instagram.com';
@@ -33,7 +53,12 @@ export async function createTokenManager({
   let state = { source, accessToken: envToken, expiresAt: null, refreshedAt: null, lastAttemptAt: null, lastError: null };
   try {
     const saved = JSON.parse(await readFile(file, 'utf8'));
-    if (saved.source === source && saved.accessToken) state = { ...state, ...saved };
+    if (saved.source === source && saved.sealed) {
+      const { sealed, ...rest } = saved;
+      state = { ...state, ...rest, accessToken: unseal(sealed, envToken) };
+    } else if (saved.source === source && saved.accessToken) {
+      state = { ...state, ...saved };
+    }
   } catch (err) {
     if (err.code !== 'ENOENT') log.warn?.(`[token] ignoring unreadable ${file}: ${err.message}`);
   }
@@ -41,7 +66,9 @@ export async function createTokenManager({
 
   async function save() {
     const tmp = `${file}.${process.pid}.tmp`;
-    await writeFile(tmp, JSON.stringify(state, null, 2), { mode: 0o600 });
+    const { accessToken, ...rest } = state;
+    const out = encrypt ? { ...rest, sealed: seal(accessToken, envToken) } : state;
+    await writeFile(tmp, JSON.stringify(out, null, 2), { mode: 0o600 });
     await rename(tmp, file);
   }
 

@@ -16,6 +16,33 @@ A small, **open-source (MIT)**, self-hosted website for scheduling Instagram pos
 
 **Try it:** there's a [clickable demo](https://claude.ai/artifact/UKqDKghWkDxRBg82uLrXfi) that runs in your browser with sample posts. The link is private by default; share it from the page's Share menu. To rebuild it, run `node demo/build-demo.mjs out.html`. It bundles the dashboard with an in-browser fake backend (`demo/demo-shim.js`), so nothing is sent to Instagram.
 
+## Free option: run it on GitHub (no server)
+
+This repository can publish your posts on its own, using GitHub Actions on GitHub's servers. It's free for public repositories. You queue a post by opening an issue, and you can do that from the GitHub app on your phone.
+
+**Step 1: queue a post.** Open the [Instagram post form](https://github.com/YukeshWorks/Biscuit-collection/issues/new?template=instagram-post.yml). Choose Feed or Story, type the time (e.g. `2026-11-20 18:30`, or `now`), drag in JPEG photos or MP4/MOV videos, write the caption, and press **Create**.
+
+**What happens next:**
+- Within a minute the bot comments to confirm the scheduled time, or explains anything it needs you to fix.
+- It checks every 15 minutes. At your time it publishes, comments the Instagram link and closes the issue. GitHub can delay scheduled runs by a few minutes when it's busy.
+- 1 video makes a Reel, 2–10 items make a carousel, and a Story takes exactly 1 item.
+- If something fails, the issue gets a **failed** label and a comment saying why. Remove the label to try again.
+- Only issues opened by the owner or collaborators are published. Issues from anyone else are ignored, because the repository is public.
+
+**Step 2: connect Instagram (one time).** In the repository, go to **Settings → Secrets and variables → Actions**.
+- *Secrets:* add `IG_USER_ID` and `IG_ACCESS_TOKEN` (see "Going live" below for how to get them).
+- *Variables (optional):* `IG_TIMEZONE`, e.g. `Asia/Kolkata`, so you can type times in your own time zone. `IG_GRAPH_HOST` defaults to `graph.instagram.com`; set it to `graph.facebook.com` for a Facebook Login token.
+
+Until the secrets are set, it runs in **dry run**: it checks each post and comments, but publishes nothing.
+
+**Token renewal:** with an Instagram Login token, the workflow renews it automatically. It stores the renewed token encrypted in the `instagram-state` branch, with a key derived from your secret, so the public branch never contains a readable token.
+
+**Why some formats are refused:** Instagram's API only accepts JPEG photos, so PNG, HEIC and WebP files get a comment explaining how to export them as JPEG. GitHub attachments are limited to 10 MB for images and 100 MB for videos.
+
+The workflow is `.github/workflows/instagram-scheduler.yml`, the form is `.github/ISSUE_TEMPLATE/instagram-post.yml`, and the code is `github/run.mjs` and `lib/github-runner.js`.
+
+## Self-hosted dashboard
+
 ## Quick start
 
 ```bash
@@ -113,6 +140,9 @@ lib/instagram.js   Graph API client (+ dry-run client)
 lib/scheduler.js   due-post loop, crash recovery
 lib/token.js       automatic access-token renewal
 lib/media.js       uploads: type sniffing, size limits, public serving with ranges
+lib/issue-post.js  GitHub issue form parsing, time zones, media checks
+lib/github-runner.js  publishes issue-queued posts from GitHub Actions
+github/run.mjs     workflow entry point
 lib/store.js       atomic JSON-file storage
 lib/validate.js    input + Instagram limit checks
 public/            dashboard (vanilla HTML/CSS/JS)
