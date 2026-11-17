@@ -14,6 +14,8 @@ A small, **open-source (MIT)**, self-hosted website for scheduling Instagram pos
 - **Automatic token renewal** (free), so the 60-day token never lapses
 - **Zero dependencies**: just Node.js 22.9+. Data is kept in a JSON file.
 
+**Try it:** there's a [clickable demo](https://claude.ai/artifact/UKqDKghWkDxRBg82uLrXfi) that runs in your browser with sample posts. The link is private by default; share it from the page's Share menu. To rebuild it, run `node demo/build-demo.mjs out.html`. It bundles the dashboard with an in-browser fake backend (`demo/demo-shim.js`), so nothing is sent to Instagram.
+
 ## Quick start
 
 ```bash
@@ -114,6 +116,7 @@ lib/media.js       uploads: type sniffing, size limits, public serving with rang
 lib/store.js       atomic JSON-file storage
 lib/validate.js    input + Instagram limit checks
 public/            dashboard (vanilla HTML/CSS/JS)
+demo/              single-file browser demo builder + fake backend
 test/              node:test suite
 Dockerfile, docker-compose.yml, Caddyfile, biscuit-scheduler.service   deployment
 ```

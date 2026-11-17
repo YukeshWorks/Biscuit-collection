@@ -46,6 +46,26 @@ function uploadBlob(blob, onProgress) {
   });
 }
 
+// In-page confirmation, because native confirm dialogs are blocked in some embedded views.
+function askConfirm(text, yesLabel = 'Confirm') {
+  const box = $('#confirm');
+  $('#confirm-text').textContent = text;
+  $('#confirm-yes').textContent = yesLabel;
+  box.hidden = false;
+  $('#confirm-yes').focus();
+  return new Promise((resolve) => {
+    const done = (answer) => {
+      box.hidden = true;
+      $('#confirm-yes').onclick = $('#confirm-no').onclick = box.onclick = box.onkeydown = null;
+      resolve(answer);
+    };
+    $('#confirm-yes').onclick = () => done(true);
+    $('#confirm-no').onclick = () => done(false);
+    box.onclick = (e) => { if (e.target === box) done(false); };
+    box.onkeydown = (e) => { if (e.key === 'Escape') done(false); };
+  });
+}
+
 function banner(text, bad = false) {
   const b = $('#banner');
   b.textContent = text;
@@ -113,7 +133,9 @@ function toLocalInput(date) {
 const form = () => $('#post-form');
 const placement = () => form().placement.value;
 const readyMedia = () => state.compose.media.filter((m) => m.status === 'ready');
-const mediaSrc = (m) => m.blobUrl || (m.file ? `/media/${m.file}` : m.url);
+// Where an uploaded file is served from. The in-browser demo overrides this hook.
+const mediaPath = (file) => window.BISCUIT_MEDIA_URL?.(file) ?? `/media/${file}`;
+const mediaSrc = (m) => m.blobUrl || (m.file ? mediaPath(m.file) : m.url);
 
 function derivedType() {
   const media = state.compose.media;
@@ -351,6 +373,11 @@ async function loadPosts() {
   try {
     state.posts = (await api('/api/posts')).posts;
     renderQueue();
+    // While something is publishing, check back quickly instead of waiting for the 15s refresh.
+    clearTimeout(state.fastRefresh);
+    if (state.posts.some((p) => p.status === 'publishing' || (p.status === 'scheduled' && Date.parse(p.publishAt) <= Date.now()))) {
+      state.fastRefresh = setTimeout(loadPosts, 2000);
+    }
   } catch { /* login view / banner handles it */ }
 }
 
@@ -385,7 +412,7 @@ function renderQueue() {
 
 function thumbFor(p) {
   const first = p.media?.[0];
-  const src = first && (first.file ? `/media/${first.file}` : first.url);
+  const src = first && (first.file ? mediaPath(first.file) : first.url);
   let t;
   if (!first || first.kind === 'video') {
     t = first?.file ? el('video', { src, muted: true, preload: 'metadata' }) : el('div', { textContent: first ? 'VIDEO' : '—' });
@@ -420,12 +447,12 @@ function renderItem(p) {
     actions.append(b);
   };
   if (['scheduled', 'failed'].includes(p.status)) add('Edit', () => loadIntoCompose(p, { editing: true }));
-  if (p.status === 'scheduled') add('Publish now', () => confirm('Publish this post now?') && api(`/api/posts/${p.id}/publish-now`, { method: 'POST' }));
-  if (p.status === 'failed') add('Retry', () => confirm('Retry now? If the error says it was interrupted, check Instagram first so you don’t post twice.') && api(`/api/posts/${p.id}/retry`, { method: 'POST' }));
+  if (p.status === 'scheduled') add('Publish now', async () => (await askConfirm('Publish this post now?', 'Publish now')) && api(`/api/posts/${p.id}/publish-now`, { method: 'POST' }));
+  if (p.status === 'failed') add('Retry', async () => (await askConfirm('Retry now? If the error says it was interrupted, check Instagram first so you don’t post twice.', 'Retry')) && api(`/api/posts/${p.id}/retry`, { method: 'POST' }));
   add('Duplicate', () => loadIntoCompose(p, { editing: false }));
   if (p.status !== 'publishing') {
     const published = p.status === 'published';
-    add(published ? 'Remove' : 'Delete', () => confirm(published ? 'Remove from this list? (It stays on Instagram.)' : 'Delete this post?') && api(`/api/posts/${p.id}`, { method: 'DELETE' }), 'danger');
+    add(published ? 'Remove' : 'Delete', async () => (await askConfirm(published ? 'Remove this post from the list? It stays on Instagram.' : 'Delete this post? This can’t be undone.', published ? 'Remove' : 'Delete')) && api(`/api/posts/${p.id}`, { method: 'DELETE' }), 'danger');
   }
   return el('li', { className: 'item' }, thumbFor(p), body, actions);
 }
