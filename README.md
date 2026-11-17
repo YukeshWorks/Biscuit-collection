@@ -6,6 +6,10 @@ A responsive creator-support and digital-art storefront starter for the BISCUIT 
 
 This is a frontend starter, not a production payment system. The UI deliberately does not accept payments or deliver paid files yet. The Razorpay/server integration, authenticated owner dashboard, database persistence, and private digital asset delivery must be implemented and tested before launch.
 
+## Instagram post scheduler
+
+`scheduler/` contains an open-source (MIT), self-hosted website that schedules and automatically publishes Instagram posts through Meta's official Content Publishing API. See [scheduler/README.md](scheduler/README.md).
+
 ## Run locally
 
 Open `index.html` in a modern browser, or run a local static server:
