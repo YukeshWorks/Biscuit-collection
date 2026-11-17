@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BISCUIT Post Scheduler</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <!-- Login -->
+  <main id="login-view" class="login" hidden>
+    <form id="login-form" class="card login-card">
+      <img src="/favicon.svg" alt="" width="48" height="48">
+      <h1>Post Scheduler</h1>
+      <p class="muted">Self-hosted Instagram scheduling for BISCUIT.</p>
+      <label>Dashboard password
+        <input type="password" name="password" autocomplete="current-password" required autofocus>
+      </label>
+      <p class="error" id="login-error" role="alert"></p>
+      <button class="btn primary" type="submit">Log in</button>
+    </form>
+  </main>
+
+  <!-- Dashboard -->
+  <div id="app-view" hidden>
+    <header class="topbar">
+      <div class="brand"><img src="/favicon.svg" alt="" width="28" height="28"> <strong>BISCUIT</strong> <span class="muted">Post Scheduler</span></div>
+      <div class="topbar-actions">
+        <span id="mode-pill" class="pill">…</span>
+        <button id="check-btn" class="btn ghost" type="button">Test connection</button>
+        <button id="logout-btn" class="btn ghost" type="button">Log out</button>
+      </div>
+    </header>
+    <p id="banner" class="banner" role="status" hidden></p>
+    <div id="token-note" class="token-note" hidden>
+      <span id="token-text"></span>
+      <button id="renew-btn" class="btn small ghost" type="button" hidden>Renew now</button>
+    </div>
+
+    <main class="layout">
+      <section class="card compose" aria-labelledby="compose-title">
+        <div class="compose-head">
+          <h2 id="compose-title">New post</h2>
+          <span id="type-badge" class="type-badge">Image post</span>
+        </div>
+        <form id="post-form" novalidate>
+          <fieldset class="seg">
+            <legend class="sr-only">Where to post</legend>
+            <label><input type="radio" name="placement" value="FEED" checked> Feed post</label>
+            <label><input type="radio" name="placement" value="STORY"> Story</label>
+          </fieldset>
+
+          <div class="field">
+            <span class="field-label">Media <small class="muted" id="media-hint">1 image or video, or 2–10 for a carousel</small></span>
+            <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Upload photos or videos">
+              <input id="file-input" type="file" accept="image/*,video/mp4,video/quicktime" multiple hidden>
+              <strong>Drop photos or videos here</strong>
+              <span class="muted">or click to choose. PNG/WebP are converted to JPEG automatically.</span>
+            </div>
+            <p id="upload-warning" class="warn-text" hidden></p>
+            <ol id="media-list" class="media-list" aria-label="Selected media (in posting order)"></ol>
+            <div class="url-add">
+              <input type="url" id="url-input" placeholder="…or paste a public https:// link to an image or video">
+              <button class="btn ghost small" type="button" id="url-add-btn">Add link</button>
+            </div>
+          </div>
+
+          <label id="caption-field">Caption
+            <textarea name="caption" rows="5" maxlength="2200" placeholder="New wallpaper drop ✨ #biscuitart"></textarea>
+            <small class="counters"><span id="c-chars">0/2200</span> · <span id="c-tags">0/30 hashtags</span> · <span id="c-mentions">0/20 mentions</span></small>
+          </label>
+          <p id="story-note" class="muted small-note" hidden>Instagram’s API doesn’t support captions or stickers on stories.</p>
+
+          <label>Publish at
+            <input type="datetime-local" name="publishAt" required>
+            <small class="muted" id="tz-note"></small>
+          </label>
+
+          <p class="error" id="form-error" role="alert"></p>
+          <div class="row">
+            <button class="btn primary" type="submit" id="submit-btn">Schedule post</button>
+            <button class="btn ghost" type="button" id="now-btn">Set to now</button>
+            <button class="btn ghost" type="button" id="cancel-edit-btn" hidden>Cancel edit</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="preview-wrap" aria-label="Preview">
+        <div class="phone" id="phone">
+          <div class="ig-head"><span class="avatar"></span><strong>biscuit</strong><span class="story-bar" aria-hidden="true"></span></div>
+          <div class="ig-media" id="preview-media"><span class="muted">Preview appears here</span></div>
+          <div class="ig-nav" id="preview-nav" hidden>
+            <button type="button" class="nav-btn" id="prev-btn" aria-label="Previous">‹</button>
+            <span id="preview-dots" class="dots"></span>
+            <button type="button" class="nav-btn" id="next-btn" aria-label="Next">›</button>
+          </div>
+          <p class="ig-caption" id="preview-caption"><strong>biscuit</strong> <span></span></p>
+        </div>
+        <p id="ratio-warning" class="warn-text center" hidden></p>
+      </section>
+
+      <section class="card queue" aria-labelledby="queue-title">
+        <div class="queue-head">
+          <h2 id="queue-title">Queue</h2>
+          <div class="tabs" role="tablist">
+            <button role="tab" data-filter="upcoming" aria-selected="true">Upcoming</button>
+            <button role="tab" data-filter="calendar" aria-selected="false">Calendar</button>
+            <button role="tab" data-filter="published" aria-selected="false">Published</button>
+            <button role="tab" data-filter="failed" aria-selected="false">Failed</button>
+          </div>
+        </div>
+        <ul id="queue-list" class="queue-list"></ul>
+        <div id="calendar" class="calendar" hidden>
+          <div class="cal-head">
+            <button type="button" class="btn small ghost" id="cal-prev" aria-label="Previous month">‹</button>
+            <strong id="cal-title"></strong>
+            <button type="button" class="btn small ghost" id="cal-next" aria-label="Next month">›</button>
+            <button type="button" class="btn small ghost" id="cal-today">Today</button>
+          </div>
+          <div id="cal-grid" class="cal-grid"></div>
+        </div>
+        <p id="queue-empty" class="muted empty" hidden>Nothing here yet.</p>
+      </section>
+    </main>
+
+    <div id="confirm" class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-text" hidden>
+      <div class="modal-card">
+        <p id="confirm-text"></p>
+        <div class="row end">
+          <button class="btn ghost" type="button" id="confirm-no">Cancel</button>
+          <button class="btn primary" type="button" id="confirm-yes">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <footer class="foot muted">Open source (MIT). Uses Meta’s official Instagram Content Publishing API. Business or Creator accounts only.</footer>
+  </div>
+</body>
+</html>

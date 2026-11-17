@@ -1,0 +1,13 @@
+{
+  "name": "biscuit-post-scheduler",
+  "version": "0.2.0",
+  "description": "Self-hosted, open-source Instagram post scheduler using Meta's official Content Publishing API.",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=22.9" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "test": "node --test test/*.test.js"
+  }
+}
