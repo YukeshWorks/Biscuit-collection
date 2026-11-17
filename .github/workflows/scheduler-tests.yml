@@ -1,0 +1,27 @@
+name: Scheduler tests
+
+on:
+  pull_request:
+    paths: ["scheduler/**", ".github/**"]
+  push:
+    branches: [main]
+    paths: ["scheduler/**", ".github/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: scheduler
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
