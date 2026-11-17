@@ -7,6 +7,7 @@ A small, **open-source (MIT)**, self-hosted website for scheduling Instagram pos
 - Queue with Upcoming / Published / Failed tabs, plus Publish now, Retry and Delete actions
 - **Dry-run mode** (the default) that simulates publishing so you can test safely
 - Password-protected dashboard, HttpOnly session cookie, strict CSP
+- **Automatic token renewal** (free), so the 60-day token never lapses
 - **Zero dependencies**: just Node.js 22.9+. Data is kept in a JSON file.
 
 ## Quick start
@@ -44,7 +45,14 @@ IG_ACCESS_TOKEN=...      # long-lived token; never commit this
 
 Restart, and click **Test connection**. It should show your @username.
 
-> Long-lived tokens expire after about 60 days. Refresh them before then, or publishing will start failing with an auth error, which shows up in the Failed tab.
+### Token renewal (free, automatic)
+
+Long-lived tokens last 60 days. Renewing them costs nothing.
+
+- **Instagram Login (`IG_GRAPH_HOST=graph.instagram.com`): renewed automatically.** The server checks every hour and renews once fewer than 50 days are left, so roughly every 10 days. It calls Meta's free `refresh_access_token` endpoint. The new token is saved to `DATA_DIR/token.json` (file mode 600) so it survives restarts. The dashboard shows the expiry date and has a **Renew now** button. If a renewal fails, you see a warning there and it retries daily. If you paste a different token into `.env`, that one takes over.
+- **Facebook Login (`graph.facebook.com`):** Meta doesn't offer a renew call for these tokens. Instead, create a **System User** token in Meta Business Settings with "Never" as the expiry. Or swap in a new token before the 60 days are up. The dashboard reminds you that auto-renew is off.
+
+Keep the server running at least once every 60 days. An already-expired token can't be renewed, and you'd need to generate a new one.
 
 ### Things Instagram requires
 
@@ -66,7 +74,7 @@ If the server is killed **mid-publish**, the post is marked *failed* with "Inter
 
 ## Deploying
 
-The app must stay running for the scheduler to fire, so a static host won't work. Any small always-on box works: a VPS, Raspberry Pi, Fly.io, Railway or Render. Run `npm start` under systemd, pm2 or Docker. Put it behind an HTTPS reverse proxy (Caddy or nginx) and set `COOKIE_SECURE=true`. Keep `HOST=127.0.0.1` when the proxy is on the same machine. Back up `DATA_DIR/posts.json`.
+The app must stay running for the scheduler to fire, so a static host won't work. Any small always-on box works: a VPS, Raspberry Pi, Fly.io, Railway or Render. Run `npm start` under systemd, pm2 or Docker. Put it behind an HTTPS reverse proxy (Caddy or nginx) and set `COOKIE_SECURE=true`. Keep `HOST=127.0.0.1` when the proxy is on the same machine. Back up `DATA_DIR/` (`posts.json`, and `token.json`, which holds the renewed token: treat it like a password).
 
 ## Layout
 
@@ -74,6 +82,7 @@ The app must stay running for the scheduler to fire, so a static host won't work
 server.js          HTTP server, auth, REST API
 lib/instagram.js   Graph API client (+ dry-run client)
 lib/scheduler.js   due-post loop, crash recovery
+lib/token.js       automatic access-token renewal
 lib/store.js       atomic JSON-file storage
 lib/validate.js    input + Instagram limit checks
 public/            dashboard (vanilla HTML/CSS/JS)

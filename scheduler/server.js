@@ -7,6 +7,7 @@ import { createStore } from './lib/store.js';
 import { validatePost } from './lib/validate.js';
 import { createInstagramClient, createDryRunClient } from './lib/instagram.js';
 import { createScheduler } from './lib/scheduler.js';
+import { createTokenManager } from './lib/token.js';
 
 const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), 'public');
 const STATIC = {
@@ -27,7 +28,7 @@ const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 const sha = (s) => createHash('sha256').update(String(s)).digest();
 
-export async function createApp(env = process.env, { client: injectedClient, log = console } = {}) {
+export async function createApp(env = process.env, { client: injectedClient, fetchImpl, log = console } = {}) {
   const password = env.ADMIN_PASSWORD ?? '';
   if (password.length < 12) throw new Error('ADMIN_PASSWORD must be set and at least 12 characters long.');
   const passwordHash = sha(password);
@@ -47,6 +48,18 @@ export async function createApp(env = process.env, { client: injectedClient, log
   const store = await createStore(env.DATA_DIR || './data');
   const scheduler = createScheduler({ store, client, log });
   await scheduler.recover();
+
+  // Auto-renews the access token (live mode only). Renewed tokens go straight into the client.
+  const tokens = client.dryRun
+    ? null
+    : await createTokenManager({
+        envToken: env.IG_ACCESS_TOKEN,
+        host: env.IG_GRAPH_HOST || 'graph.facebook.com',
+        dataDir: env.DATA_DIR || './data',
+        fetchImpl,
+        onToken: (t) => client.setAccessToken?.(t),
+        log,
+      });
 
   const sessions = new Map(); // token -> expiry
   const loginFailures = new Map(); // ip -> { count, until }
@@ -111,12 +124,19 @@ export async function createApp(env = process.env, { client: injectedClient, log
     }
 
     if (path === '/api/status' && method === 'GET') {
-      return send(res, 200, { dryRun: client.dryRun, apiVersion: env.IG_API_VERSION || 'v23.0' });
+      return send(res, 200, { dryRun: client.dryRun, apiVersion: env.IG_API_VERSION || 'v23.0', token: tokens?.status() ?? null });
     }
 
     if (path === '/api/check' && method === 'POST') {
       try { return send(res, 200, { ok: true, account: await client.whoami() }); }
       catch (err) { return send(res, 502, { ok: false, error: err.message }); }
+    }
+
+    if (path === '/api/token/renew' && method === 'POST') {
+      if (!tokens?.status().autoRenew) return send(res, 409, { error: 'Token renewal needs live mode with IG_GRAPH_HOST=graph.instagram.com.' });
+      await tokens.renew();
+      const token = tokens.status();
+      return send(res, token.lastError ? 502 : 200, { token, error: token.lastError ?? undefined });
     }
 
     if (path === '/api/posts' && method === 'GET') {
@@ -184,11 +204,16 @@ export async function createApp(env = process.env, { client: injectedClient, log
     }
   });
 
-  return { server, scheduler, store, client };
+  return { server, scheduler, store, client, tokens };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const { server, scheduler, client } = await createApp();
+  const { server, scheduler, client, tokens } = await createApp();
+  if (tokens) {
+    const checkToken = () => tokens.check().catch((e) => console.error(e));
+    checkToken();
+    setInterval(checkToken, 60 * 60 * 1000).unref(); // hourly check; renews ~every 10 days
+  }
   const host = process.env.HOST || '127.0.0.1';
   const port = Number(process.env.PORT || 8787);
   scheduler.start(30_000);

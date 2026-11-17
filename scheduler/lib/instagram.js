@@ -17,7 +17,9 @@ export function createInstagramClient({
   maxPolls = 60,
 }) {
   const base = `https://${host}/${version}`;
-  const scrub = (s) => String(s).split(accessToken).join('[token]');
+  // Scrub every token this client has used, so a renewed token never leaks into errors either.
+  const seen = new Set([accessToken]);
+  const scrub = (s) => [...seen].reduce((out, t) => out.split(t).join('[token]'), String(s));
 
   async function call(method, path, params = {}) {
     const url = new URL(base + path);
@@ -57,6 +59,10 @@ export function createInstagramClient({
 
   return {
     dryRun: false,
+    setAccessToken(token) {
+      accessToken = token;
+      seen.add(token);
+    },
     async whoami() {
       return call('GET', `/${userId}`, { fields: 'username,name' });
     },

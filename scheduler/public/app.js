@@ -38,10 +38,35 @@ async function showApp() {
   pill.textContent = status.dryRun ? 'Dry run' : 'Live';
   pill.className = `pill ${status.dryRun ? 'dry' : 'live'}`;
   pill.title = status.dryRun ? 'Nothing is sent to Instagram. Set DRY_RUN=false with your credentials to go live.' : `Publishing via Graph API ${status.apiVersion}`;
+  renderToken(status.token);
   setDefaultTime();
   await loadPosts();
   clearInterval(state.refreshTimer);
   state.refreshTimer = setInterval(loadPosts, 15000);
+}
+
+/* ---------- token ---------- */
+const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
+function renderToken(token) {
+  const box = $('#token-note');
+  box.hidden = !token;
+  if (!token) return;
+  const days = token.expiresAt ? Math.floor((Date.parse(token.expiresAt) - Date.now()) / 86400000) : null;
+  let text, level = '';
+  if (!token.autoRenew) {
+    text = 'Token auto-renew is off (it only works with IG_GRAPH_HOST=graph.instagram.com). Use a token that never expires, or replace it before it expires. See the README.';
+    level = 'warn';
+  } else if (token.lastError) {
+    text = `Couldn’t renew the token: ${token.lastError}. It will retry daily.${days !== null ? ` ${days} days left.` : ''}`;
+    level = days !== null && days < 7 ? 'bad' : 'warn';
+  } else if (days !== null) {
+    text = `🔄 Token renews automatically. Valid until ${dateFmt.format(new Date(token.expiresAt))} (${days} days).`;
+  } else {
+    text = '🔄 Token renews automatically. First renewal pending (tokens must be at least 24h old).';
+  }
+  $('#token-text').textContent = text;
+  box.className = `token-note ${level}`;
+  $('#renew-btn').hidden = !token.autoRenew;
 }
 
 /* ---------- compose ---------- */
@@ -217,6 +242,19 @@ $('#check-btn').onclick = async (e) => {
     banner(`Connected as @${account.username}.`);
   } catch (err) {
     banner(`Connection failed: ${err.message}`, true);
+  } finally {
+    e.target.disabled = false;
+  }
+};
+$('#renew-btn').onclick = async (e) => {
+  e.target.disabled = true;
+  try {
+    const { token } = await api('/api/token/renew', { method: 'POST' });
+    renderToken(token);
+    banner('Token renewed.');
+  } catch (err) {
+    banner(`Renewal failed: ${err.message}`, true);
+    renderToken((await api('/api/status').catch(() => ({}))).token);
   } finally {
     e.target.disabled = false;
   }
