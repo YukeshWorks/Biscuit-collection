@@ -41,23 +41,37 @@
 
     <main class="layout">
       <section class="card compose" aria-labelledby="compose-title">
-        <h2 id="compose-title">New post</h2>
-        <form id="post-form">
+        <div class="compose-head">
+          <h2 id="compose-title">New post</h2>
+          <span id="type-badge" class="type-badge">Image post</span>
+        </div>
+        <form id="post-form" novalidate>
           <fieldset class="seg">
-            <legend class="sr-only">Media type</legend>
-            <label><input type="radio" name="mediaType" value="IMAGE" checked> Image</label>
-            <label><input type="radio" name="mediaType" value="REELS"> Reel (video)</label>
+            <legend class="sr-only">Where to post</legend>
+            <label><input type="radio" name="placement" value="FEED" checked> Feed post</label>
+            <label><input type="radio" name="placement" value="STORY"> Story</label>
           </fieldset>
 
-          <label>Media URL
-            <input type="url" name="mediaUrl" placeholder="https://…/artwork.jpg" required pattern="https://.*">
-            <small class="muted">Must be a public https link. Instagram downloads the file from it. Images: JPEG. Reels: MP4.</small>
-          </label>
+          <div class="field">
+            <span class="field-label">Media <small class="muted" id="media-hint">1 image or video, or 2–10 for a carousel</small></span>
+            <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Upload photos or videos">
+              <input id="file-input" type="file" accept="image/*,video/mp4,video/quicktime" multiple hidden>
+              <strong>Drop photos or videos here</strong>
+              <span class="muted">or click to choose. PNG/WebP are converted to JPEG automatically.</span>
+            </div>
+            <p id="upload-warning" class="warn-text" hidden></p>
+            <ol id="media-list" class="media-list" aria-label="Selected media (in posting order)"></ol>
+            <div class="url-add">
+              <input type="url" id="url-input" placeholder="…or paste a public https:// link to an image or video">
+              <button class="btn ghost small" type="button" id="url-add-btn">Add link</button>
+            </div>
+          </div>
 
-          <label>Caption
-            <textarea name="caption" rows="6" maxlength="2200" placeholder="New wallpaper drop ✨ #biscuitart"></textarea>
+          <label id="caption-field">Caption
+            <textarea name="caption" rows="5" maxlength="2200" placeholder="New wallpaper drop ✨ #biscuitart"></textarea>
             <small class="counters"><span id="c-chars">0/2200</span> · <span id="c-tags">0/30 hashtags</span> · <span id="c-mentions">0/20 mentions</span></small>
           </label>
+          <p id="story-note" class="muted small-note" hidden>Instagram’s API doesn’t support captions or stickers on stories.</p>
 
           <label>Publish at
             <input type="datetime-local" name="publishAt" required>
@@ -66,18 +80,25 @@
 
           <p class="error" id="form-error" role="alert"></p>
           <div class="row">
-            <button class="btn primary" type="submit">Schedule post</button>
+            <button class="btn primary" type="submit" id="submit-btn">Schedule post</button>
             <button class="btn ghost" type="button" id="now-btn">Set to now</button>
+            <button class="btn ghost" type="button" id="cancel-edit-btn" hidden>Cancel edit</button>
           </div>
         </form>
       </section>
 
       <section class="preview-wrap" aria-label="Preview">
-        <div class="phone">
-          <div class="ig-head"><span class="avatar"></span><strong>biscuit</strong></div>
+        <div class="phone" id="phone">
+          <div class="ig-head"><span class="avatar"></span><strong>biscuit</strong><span class="story-bar" aria-hidden="true"></span></div>
           <div class="ig-media" id="preview-media"><span class="muted">Preview appears here</span></div>
+          <div class="ig-nav" id="preview-nav" hidden>
+            <button type="button" class="nav-btn" id="prev-btn" aria-label="Previous">‹</button>
+            <span id="preview-dots" class="dots"></span>
+            <button type="button" class="nav-btn" id="next-btn" aria-label="Next">›</button>
+          </div>
           <p class="ig-caption" id="preview-caption"><strong>biscuit</strong> <span></span></p>
         </div>
+        <p id="ratio-warning" class="warn-text center" hidden></p>
       </section>
 
       <section class="card queue" aria-labelledby="queue-title">
@@ -85,16 +106,26 @@
           <h2 id="queue-title">Queue</h2>
           <div class="tabs" role="tablist">
             <button role="tab" data-filter="upcoming" aria-selected="true">Upcoming</button>
+            <button role="tab" data-filter="calendar" aria-selected="false">Calendar</button>
             <button role="tab" data-filter="published" aria-selected="false">Published</button>
             <button role="tab" data-filter="failed" aria-selected="false">Failed</button>
           </div>
         </div>
         <ul id="queue-list" class="queue-list"></ul>
+        <div id="calendar" class="calendar" hidden>
+          <div class="cal-head">
+            <button type="button" class="btn small ghost" id="cal-prev" aria-label="Previous month">‹</button>
+            <strong id="cal-title"></strong>
+            <button type="button" class="btn small ghost" id="cal-next" aria-label="Next month">›</button>
+            <button type="button" class="btn small ghost" id="cal-today">Today</button>
+          </div>
+          <div id="cal-grid" class="cal-grid"></div>
+        </div>
         <p id="queue-empty" class="muted empty" hidden>Nothing here yet.</p>
       </section>
     </main>
 
-    <footer class="foot muted">Open source (MIT). Uses Meta's official Instagram Content Publishing API. Business or Creator accounts only.</footer>
+    <footer class="foot muted">Open source (MIT). Uses Meta’s official Instagram Content Publishing API. Business or Creator accounts only.</footer>
   </div>
 </body>
 </html>

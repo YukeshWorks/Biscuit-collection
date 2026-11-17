@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir, stat as statFile } from 'node:fs/promises';
 import { join, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -8,6 +8,7 @@ import { validatePost } from './lib/validate.js';
 import { createInstagramClient, createDryRunClient } from './lib/instagram.js';
 import { createScheduler } from './lib/scheduler.js';
 import { createTokenManager } from './lib/token.js';
+import { createMediaStore, FILE_RE } from './lib/media.js';
 
 const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), 'public');
 const STATIC = {
@@ -20,7 +21,7 @@ const STATIC = {
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 const SECURITY_HEADERS = {
   'content-security-policy':
-    "default-src 'self'; img-src 'self' https: data:; media-src https:; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    "default-src 'self'; img-src 'self' https: data: blob:; media-src 'self' https: blob:; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
 };
@@ -45,8 +46,48 @@ export async function createApp(env = process.env, { client: injectedClient, fet
         })
       : createDryRunClient());
 
-  const store = await createStore(env.DATA_DIR || './data');
-  const scheduler = createScheduler({ store, client, log });
+  const dataDir = env.DATA_DIR || './data';
+  const store = await createStore(dataDir);
+  const media = await createMediaStore(dataDir, { maxVideoBytes: Number(env.MAX_VIDEO_MB || 300) * 1024 * 1024 });
+  const publicUrl = (env.PUBLIC_URL || '').replace(/\/+$/, '');
+  const uploadsReady = client.dryRun || publicUrl.startsWith('https://');
+
+  // Posts saved by v0.1 had a single mediaUrl; convert them to the media[] shape.
+  for (const p of store.list()) {
+    if (!p.media && p.mediaUrl) {
+      await store.update(p.id, {
+        placement: 'FEED',
+        media: [{ kind: p.mediaType === 'REELS' ? 'video' : 'image', url: p.mediaUrl }],
+        mediaUrl: undefined,
+      });
+    }
+  }
+
+  // Turn uploaded files into the public URLs Instagram will download.
+  function prepare(post) {
+    return {
+      ...post,
+      media: post.media.map((m) => {
+        if (!m.file) return m;
+        if (!client.dryRun && !publicUrl.startsWith('https://')) {
+          throw new Error('Uploaded files need PUBLIC_URL set to this server’s public https:// address so Instagram can download them.');
+        }
+        return { kind: m.kind, url: `${publicUrl}/media/${m.file}` };
+      }),
+    };
+  }
+
+  // Delete uploaded files that no post uses any more.
+  async function sweepMedia({ minAgeMs = 0 } = {}) {
+    const used = new Set(store.list().flatMap((p) => (p.media ?? []).map((m) => m.file).filter(Boolean)));
+    for (const f of await readdir(media.dir)) {
+      if (!FILE_RE.test(f) || used.has(f)) continue;
+      const { mtimeMs } = await statFile(join(media.dir, f)).catch(() => ({ mtimeMs: Date.now() }));
+      if (Date.now() - mtimeMs >= minAgeMs) await media.remove(f);
+    }
+  }
+
+  const scheduler = createScheduler({ store, client, prepare, log });
   await scheduler.recover();
 
   // Auto-renews the access token (live mode only). Renewed tokens go straight into the client.
@@ -98,7 +139,9 @@ export async function createApp(env = process.env, { client: injectedClient, fet
     if (path === '/api/session' && method === 'GET') return send(res, 200, { authenticated: authed(req) });
 
     if (path === '/api/login' && method === 'POST') {
-      const ip = req.socket.remoteAddress;
+      // Behind a reverse proxy every request comes from the proxy; use the client IP it appends.
+      const xff = String(req.headers['x-forwarded-for'] ?? '').split(',').pop().trim();
+      const ip = (env.TRUST_PROXY === 'true' && xff) || req.socket.remoteAddress;
       const f = loginFailures.get(ip);
       if (f && f.until > Date.now()) return send(res, 429, { error: 'Too many attempts. Try again in a minute.' });
       const { password: attempt } = await readJson(req);
@@ -124,11 +167,21 @@ export async function createApp(env = process.env, { client: injectedClient, fet
     }
 
     if (path === '/api/status' && method === 'GET') {
-      return send(res, 200, { dryRun: client.dryRun, apiVersion: env.IG_API_VERSION || 'v23.0', token: tokens?.status() ?? null });
+      return send(res, 200, {
+        dryRun: client.dryRun,
+        apiVersion: env.IG_API_VERSION || 'v23.0',
+        token: tokens?.status() ?? null,
+        uploadsReady,
+        maxVideoMb: Number(env.MAX_VIDEO_MB || 300),
+      });
     }
 
     if (path === '/api/check' && method === 'POST') {
-      try { return send(res, 200, { ok: true, account: await client.whoami() }); }
+      try {
+        const account = await client.whoami();
+        const quota = await client.quota().catch(() => ({ used: null, total: null }));
+        return send(res, 200, { ok: true, account, quota });
+      }
       catch (err) { return send(res, 502, { ok: false, error: err.message }); }
     }
 
@@ -137,6 +190,11 @@ export async function createApp(env = process.env, { client: injectedClient, fet
       await tokens.renew();
       const token = tokens.status();
       return send(res, token.lastError ? 502 : 200, { token, error: token.lastError ?? undefined });
+    }
+
+    if (path === '/api/uploads' && method === 'POST') {
+      const saved = await media.save(req);
+      return send(res, 201, { ...saved, preview: `/media/${saved.file}` });
     }
 
     if (path === '/api/posts' && method === 'GET') {
@@ -161,6 +219,7 @@ export async function createApp(env = process.env, { client: injectedClient, fet
       if (!action && method === 'DELETE') {
         if (post.status === 'publishing') return send(res, 409, { error: 'This post is publishing right now.' });
         await store.remove(id);
+        await sweepMedia();
         return send(res, 204);
       }
 
@@ -168,7 +227,10 @@ export async function createApp(env = process.env, { client: injectedClient, fet
         if (!['scheduled', 'failed'].includes(post.status)) return send(res, 409, { error: 'Only scheduled or failed posts can be edited.' });
         const { ok, errors, value } = validatePost({ ...post, ...(await readJson(req)) });
         if (!ok) return send(res, 422, { error: errors.join(' ') });
-        return send(res, 200, { post: await store.update(id, { ...value, status: 'scheduled', error: null }) });
+        const updated = await store.update(id, { ...value, status: 'scheduled', error: null });
+        await sweepMedia({ minAgeMs: 60 * 60 * 1000 });
+        scheduler.tick().catch((e) => log.error?.(e));
+        return send(res, 200, { post: updated });
       }
 
       if (action === 'retry' && method === 'POST') {
@@ -193,6 +255,11 @@ export async function createApp(env = process.env, { client: injectedClient, fet
     const path = new URL(req.url, 'http://x').pathname;
     try {
       if (path.startsWith('/api/')) return await handleApi(req, res, path);
+      // Public on purpose: Instagram fetches media from here. Names are 128-bit random.
+      if (path.startsWith('/media/') && (req.method === 'GET' || req.method === 'HEAD')) {
+        if (await media.serve(req, res, path.slice(7), { 'x-content-type-options': 'nosniff' })) return;
+        return send(res, 404, { error: 'Not found.' });
+      }
       const file = STATIC[path];
       if (!file || req.method !== 'GET') return send(res, 404, { error: 'Not found.' });
       const body = await readFile(join(PUBLIC_DIR, file));
@@ -204,11 +271,17 @@ export async function createApp(env = process.env, { client: injectedClient, fet
     }
   });
 
-  return { server, scheduler, store, client, tokens };
+  server.requestTimeout = 30 * 60 * 1000; // large video uploads on slow connections
+  return { server, scheduler, store, client, tokens, sweepMedia };
+
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const { server, scheduler, client, tokens } = await createApp();
+  const { server, scheduler, client, tokens, sweepMedia } = await createApp();
+  // Remove abandoned uploads (never attached to a post) once they're a day old.
+  const sweep = () => sweepMedia({ minAgeMs: 24 * 60 * 60 * 1000 }).catch((e) => console.error(e));
+  sweep();
+  setInterval(sweep, 6 * 60 * 60 * 1000).unref();
   if (tokens) {
     const checkToken = () => tokens.check().catch((e) => console.error(e));
     checkToken();

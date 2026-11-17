@@ -1,10 +1,14 @@
 # BISCUIT Post Scheduler
 
-A small, **open-source (MIT)**, self-hosted website for scheduling Instagram posts. You write a caption, paste a public image or video link, pick a time, and the server publishes it **automatically** through Meta's official [Instagram Content Publishing API](https://developers.facebook.com/docs/instagram-platform/content-publishing). No browser automation and no password scraping. It runs on your own server with your own token.
+A small, **open-source (MIT)**, self-hosted website for scheduling Instagram posts. You upload photos or videos (or paste links), write a caption, pick a time, and the server publishes it **automatically** through Meta's official [Instagram Content Publishing API](https://developers.facebook.com/docs/instagram-platform/content-publishing). No browser automation and no password scraping. It runs on your own server with your own token.
 
-- Schedule **image posts** and **Reels**
-- Live Instagram-style preview, plus caption, hashtag and mention counters (2200 / 30 / 20 limits)
-- Queue with Upcoming / Published / Failed tabs, plus Publish now, Retry and Delete actions
+- Schedule **image posts, Reels, carousels (2–10 items) and Stories**
+- **Upload from your device** by dragging and dropping or picking files, with a progress bar. PNG/WebP are converted to JPEG in the browser. Or paste public links instead.
+- Reorder carousel items. A live Instagram-style preview shows feed posts with swipe dots and Stories in 9:16. Warns you about image shapes Instagram won't accept.
+- Caption, hashtag and mention counters (2200 / 30 / 20 limits)
+- Queue with Upcoming / Calendar / Published / Failed views. Edit, Duplicate, Publish now, Retry and Delete actions.
+- **Month calendar**: click a post to edit it
+- **Test connection** shows your @username and how much of the 24-hour publishing limit you've used
 - **Dry-run mode** (the default) that simulates publishing so you can test safely
 - Password-protected dashboard, HttpOnly session cookie, strict CSP
 - **Automatic token renewal** (free), so the 60-day token never lapses
@@ -56,15 +60,18 @@ Keep the server running at least once every 60 days. An already-expired token ca
 
 ### Things Instagram requires
 
-- **Media must be at a public `https://` URL.** Instagram's servers download it. Use any public host or bucket (S3/R2/Cloudinary/GitHub Pages…). Images: JPEG, aspect ratio 4:5 to 1.91:1. Reels: MP4/H.264.
-- Instagram enforces a rolling **publishing limit per 24 hours** per account (see Meta's docs for the current number).
-- Stories, carousels and shopping tags aren't supported in this version.
+- **Instagram downloads the media from a public `https://` URL.** Pasted links must be public. **Uploaded** files are served by this app at `<PUBLIC_URL>/media/<random-name>`, so in live mode `PUBLIC_URL` must be this server's public https address. The Docker setup below gives you that. Upload names are 128-bit random, and files are deleted when their post is deleted.
+- Images: JPEG, feed aspect ratio 4:5 to 1.91:1 (the dashboard warns you). Videos: MP4/MOV (H.264/AAC). Reels are up to 15 minutes.
+- Stories: the API publishes the image or video only. Captions, stickers and links aren't available for Stories through the API.
+- Instagram enforces a rolling **publishing limit per 24 hours** per account. **Test connection** shows your current usage.
+- Not supported: shopping tags, collaborators, location tags, Reel cover images. These are possible additions.
 
 ## How it works
 
 ```
 every 30s → find posts with status=scheduled and publishAt ≤ now
-  → POST /{ig-user-id}/media           (create container)
+  → (carousel) POST /{ig-user-id}/media is_carousel_item=true   once per item
+  → POST /{ig-user-id}/media           (create container: IMAGE | REELS | STORIES | CAROUSEL)
   → GET  /{container-id}?fields=status_code   until FINISHED
   → POST /{ig-user-id}/media_publish   (goes live)
   → save media id + permalink
@@ -74,7 +81,27 @@ If the server is killed **mid-publish**, the post is marked *failed* with "Inter
 
 ## Deploying
 
-The app must stay running for the scheduler to fire, so a static host won't work. Any small always-on box works: a VPS, Raspberry Pi, Fly.io, Railway or Render. Run `npm start` under systemd, pm2 or Docker. Put it behind an HTTPS reverse proxy (Caddy or nginx) and set `COOKIE_SECURE=true`. Keep `HOST=127.0.0.1` when the proxy is on the same machine. Back up `DATA_DIR/` (`posts.json`, and `token.json`, which holds the renewed token: treat it like a password).
+The app must stay running for scheduled posts to go out, so static hosting (GitHub Pages, Netlify) won't work. Any small always-on machine works: a VPS, Oracle Cloud's free tier, or a Raspberry Pi.
+
+### Option A: Docker with automatic HTTPS (recommended)
+
+You need a domain (or subdomain) pointing at your server, with ports 80 and 443 open.
+
+```bash
+cd scheduler
+cp .env.example .env
+# edit .env: ADMIN_PASSWORD, DOMAIN=posts.example.com, PUBLIC_URL=https://posts.example.com,
+#            DRY_RUN=false, IG_USER_ID, IG_ACCESS_TOKEN
+docker compose up -d --build
+```
+
+Caddy gets a free Let's Encrypt certificate and forwards traffic to the app. Posts, uploads and the renewed token live in the `scheduler-data` volume.
+
+### Option B: systemd + your own reverse proxy
+
+Use `biscuit-scheduler.service` (instructions are inside the file). Put Caddy or nginx in front of it with HTTPS, and set `COOKIE_SECURE=true`, `TRUST_PROXY=true` and `PUBLIC_URL=https://…`. Allow request bodies as large as `MAX_VIDEO_MB`.
+
+**Back up `DATA_DIR/`**: `posts.json`, `media/`, and `token.json`. The token file holds your renewed token, so treat it like a password.
 
 ## Layout
 
@@ -83,10 +110,12 @@ server.js          HTTP server, auth, REST API
 lib/instagram.js   Graph API client (+ dry-run client)
 lib/scheduler.js   due-post loop, crash recovery
 lib/token.js       automatic access-token renewal
+lib/media.js       uploads: type sniffing, size limits, public serving with ranges
 lib/store.js       atomic JSON-file storage
 lib/validate.js    input + Instagram limit checks
 public/            dashboard (vanilla HTML/CSS/JS)
 test/              node:test suite
+Dockerfile, docker-compose.yml, Caddyfile, biscuit-scheduler.service   deployment
 ```
 
 ## License

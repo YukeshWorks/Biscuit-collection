@@ -1,0 +1,36 @@
+# One-command deploy with automatic HTTPS (Let's Encrypt via Caddy).
+#   1. Point your domain's DNS A record at this server.
+#   2. cp .env.example .env  and fill in DOMAIN, PUBLIC_URL, ADMIN_PASSWORD, IG_* values.
+#   3. docker compose up -d --build
+services:
+  scheduler:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      DATA_DIR: /data
+      COOKIE_SECURE: "true"
+      TRUST_PROXY: "true"
+    volumes:
+      - scheduler-data:/data
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on: [scheduler]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+      MAX_BODY: ${MAX_VIDEO_MB:-300}MB
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  scheduler-data:
+  caddy-data:
+  caddy-config:

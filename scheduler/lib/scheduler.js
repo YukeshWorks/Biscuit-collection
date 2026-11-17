@@ -1,5 +1,5 @@
 // Publishes due posts one at a time. Ticks never overlap.
-export function createScheduler({ store, client, now = () => Date.now(), log = console }) {
+export function createScheduler({ store, client, prepare = (p) => p, now = () => Date.now(), log = console }) {
   let running = false;
   let timer = null;
 
@@ -8,7 +8,7 @@ export function createScheduler({ store, client, now = () => Date.now(), log = c
     if (!post || post.status !== 'scheduled') return;
     await store.update(id, { status: 'publishing', attempts: post.attempts + 1, error: null });
     try {
-      const result = await client.publish(post, {
+      const result = await client.publish(prepare(post), {
         onContainer: (containerId) => store.update(id, { containerId }),
       });
       await store.update(id, {

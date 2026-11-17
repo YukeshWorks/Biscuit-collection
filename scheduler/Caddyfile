@@ -1,0 +1,7 @@
+{$DOMAIN} {
+	encode gzip
+	request_body {
+		max_size {$MAX_BODY}
+	}
+	reverse_proxy scheduler:8787
+}

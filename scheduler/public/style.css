@@ -105,3 +105,72 @@ input:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--vio
 .token-note { margin: 1rem clamp(16px, 4vw, 2rem) 0; padding: .55rem 1rem; border-radius: 12px; border: 1px solid var(--line); font-size: .85rem; color: var(--muted); display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
 .token-note.warn { border-color: var(--gold); color: var(--gold); }
 .token-note.bad { border-color: var(--red); color: var(--red); }
+
+/* ---------- v0.2: compose media, story preview, calendar ---------- */
+.compose-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.type-badge { font-size: .75rem; font-weight: 700; color: var(--pink); border: 1px solid #f0a8d455; border-radius: 999px; padding: .2rem .65rem; }
+.field { margin-bottom: 1rem; }
+.field-label { display: block; font-weight: 600; font-size: .9rem; margin-bottom: .35rem; }
+.field-label small { font-weight: 400; margin-left: .35rem; }
+.dropzone { display: grid; gap: .2rem; place-items: center; text-align: center; padding: 1.25rem 1rem; border: 1.5px dashed var(--line); border-radius: 12px; background: var(--panel-2); cursor: pointer; transition: border-color .15s, background .15s; }
+.dropzone:hover, .dropzone.over, .dropzone:focus-visible { border-color: var(--violet); background: #aa8cff14; outline: none; }
+.dropzone.full { opacity: .45; pointer-events: none; }
+.dropzone span { font-size: .8rem; }
+.warn-text { color: var(--gold); font-size: .8rem; margin: .4rem 0 0; }
+.warn-text.center { text-align: center; max-width: 340px; }
+.small-note { font-size: .8rem; margin: -.25rem 0 1rem; }
+.url-add { display: flex; gap: .5rem; margin-top: .6rem; }
+.url-add input { flex: 1; min-width: 0; width: auto; background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: .5rem .7rem; font: inherit; font-size: .85rem; }
+
+.media-list { list-style: none; margin: .6rem 0 0; padding: 0; display: flex; gap: .5rem; flex-wrap: wrap; }
+.media-list:empty { display: none; }
+.mitem { position: relative; width: 88px; height: 88px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; }
+.mitem.error { border-color: var(--red); }
+.mthumb { width: 100%; height: 100%; object-fit: cover; display: grid; place-items: center; font-size: .7rem; color: var(--muted); }
+.mnum { position: absolute; top: 4px; left: 4px; background: #0b0913cc; color: var(--ink); font-size: .7rem; font-weight: 700; border-radius: 999px; min-width: 18px; height: 18px; display: grid; place-items: center; padding: 0 4px; }
+.mkind { position: absolute; top: 4px; right: 4px; background: #0b0913cc; font-size: .6rem; border-radius: 999px; width: 18px; height: 18px; display: grid; place-items: center; }
+.mprog, .merr { position: absolute; inset: 0; display: grid; place-items: center; background: #0b0913b3; font-weight: 700; font-size: .85rem; }
+.merr { color: var(--red); font-size: 1.4rem; }
+.mctl { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; background: linear-gradient(transparent, #0b0913e6); padding: 10px 3px 3px; opacity: 0; transition: opacity .15s; }
+.mitem:hover .mctl, .mitem:focus-within .mctl { opacity: 1; }
+@media (hover: none) { .mctl { opacity: 1; } }
+.mctl button { background: #ffffff1f; color: var(--ink); border: 0; border-radius: 6px; width: 24px; height: 22px; font-size: .75rem; cursor: pointer; padding: 0; }
+.mctl button:hover:not(:disabled) { background: var(--violet); color: #160f22; }
+.mctl button:disabled { opacity: .3; cursor: default; }
+
+.preview-wrap { flex-direction: column; align-items: center; gap: .75rem; }
+.ig-nav { display: flex; align-items: center; justify-content: space-between; padding: .35rem .5rem 0; }
+.nav-btn { background: #f1eef6; border: 0; border-radius: 999px; width: 28px; height: 28px; font-size: 1.1rem; cursor: pointer; color: #333; }
+.dots { display: flex; gap: 4px; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: #cfc8da; }
+.dot.on { background: #3897f0; }
+.story-bar { display: none; }
+.phone.story { background: #111; color: #fff; }
+.phone.story .ig-head { position: absolute; z-index: 2; left: 0; right: 0; top: 0; padding-top: 1rem; background: linear-gradient(#0008, transparent); }
+.phone.story .story-bar { display: block; position: absolute; left: .75rem; right: .75rem; top: .45rem; height: 2px; background: #fff9; border-radius: 2px; }
+.phone.story .ig-media { aspect-ratio: 9 / 16; background: #222; }
+.phone.story .ig-media .muted { color: #aaa; }
+.phone { position: relative; }
+
+.type-chip { font-size: .7rem; border: 1px solid var(--line); border-radius: 999px; padding: 0 .45rem; }
+.tabs { flex-wrap: wrap; }
+
+.calendar { display: grid; gap: .6rem; }
+.cal-head { display: flex; align-items: center; gap: .5rem; }
+.cal-head strong { min-width: 10ch; text-align: center; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-dow { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; text-align: center; padding: .2rem 0; }
+.cal-cell { min-height: 84px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 4px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cal-cell.other { opacity: .4; }
+.cal-cell.today { border-color: var(--violet); }
+.cal-date { font-size: .75rem; color: var(--muted); }
+.cal-cell.today .cal-date { color: var(--violet); font-weight: 700; }
+.cal-chip { font: inherit; font-size: .68rem; text-align: left; border: 0; border-radius: 5px; padding: 2px 5px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #160f22; background: var(--cyan); }
+.cal-chip.published { background: var(--green); }
+.cal-chip.failed { background: var(--red); }
+.cal-chip.publishing { background: var(--gold); }
+@media (max-width: 560px) {
+  .cal-cell { min-height: 56px; padding: 2px; }
+  .cal-chip { font-size: 0; height: 8px; padding: 0; }
+  .mitem { width: 72px; height: 72px; }
+}

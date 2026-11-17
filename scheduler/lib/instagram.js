@@ -66,10 +66,42 @@ export function createInstagramClient({
     async whoami() {
       return call('GET', `/${userId}`, { fields: 'username,name' });
     },
+    // Share of the rolling 24h publishing limit used so far.
+    async quota() {
+      const { data = [] } = await call('GET', `/${userId}/content_publishing_limit`, { fields: 'quota_usage,config' });
+      const row = data[0] ?? {};
+      return { used: row.quota_usage ?? null, total: row.config?.quota_total ?? null };
+    },
+    // post.media items must already carry public https `url`s (see server prepare()).
     async publish(post, { onContainer } = {}) {
-      const params = { caption: post.caption };
-      if (post.mediaType === 'REELS') Object.assign(params, { media_type: 'REELS', video_url: post.mediaUrl });
-      else params.image_url = post.mediaUrl;
+      const media = post.media;
+      const urlParam = (m) => (m.kind === 'video' ? { video_url: m.url } : { image_url: m.url });
+      let params;
+      switch (post.mediaType) {
+        case 'IMAGE':
+          params = { ...urlParam(media[0]), caption: post.caption };
+          break;
+        case 'REELS':
+          params = { media_type: 'REELS', ...urlParam(media[0]), caption: post.caption };
+          break;
+        case 'STORIES':
+          params = { media_type: 'STORIES', ...urlParam(media[0]) };
+          break;
+        case 'CAROUSEL': {
+          const children = [];
+          for (const m of media) {
+            const child = { is_carousel_item: 'true', ...urlParam(m) };
+            if (m.kind === 'video') child.media_type = 'VIDEO';
+            const { id } = await call('POST', `/${userId}/media`, child);
+            children.push(id);
+          }
+          for (const id of children) await waitForContainer(id);
+          params = { media_type: 'CAROUSEL', children: children.join(','), caption: post.caption };
+          break;
+        }
+        default:
+          throw new InstagramError(`Unsupported media type ${post.mediaType}`);
+      }
 
       const { id: containerId } = await call('POST', `/${userId}/media`, params);
       await onContainer?.(containerId);
@@ -91,6 +123,9 @@ export function createDryRunClient() {
     dryRun: true,
     async whoami() {
       return { username: '(dry run)' };
+    },
+    async quota() {
+      return { used: null, total: null };
     },
     async publish(_post, { onContainer } = {}) {
       await onContainer?.(`dry_container_${randomUUID().slice(0, 8)}`);
