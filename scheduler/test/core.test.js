@@ -83,7 +83,8 @@ test('instagram client runs container -> poll -> publish and scrubs the token', 
   const calls = [];
   let polls = 0;
   const fetchImpl = async (url, init) => {
-    calls.push({ path: url.pathname, method: init.method, body: init.body && Object.fromEntries(init.body), auth: init.headers.authorization });
+    const body = init.body && Object.fromEntries(init.body);
+    calls.push({ path: url.pathname, method: init.method, body: body && (({ access_token, ...rest }) => rest)(body), token: body?.access_token ?? url.searchParams.get('access_token') });
     const json = (o, status = 200) => ({ ok: status < 400, status, json: async () => o });
     if (url.pathname.endsWith('/media') && init.method === 'POST') return json({ id: 'C1' });
     if (url.pathname.endsWith('/C1')) return json({ status_code: ++polls < 2 ? 'IN_PROGRESS' : 'FINISHED' });
@@ -97,7 +98,7 @@ test('instagram client runs container -> poll -> publish and scrubs the token', 
   assert.equal(calls[0].body.media_type, 'REELS');
   assert.equal(calls[0].body.video_url, 'https://x/v.mp4');
   assert.equal(calls.find((c) => c.path.endsWith('/media_publish')).body.creation_id, 'C1');
-  assert.ok(calls.every((c) => c.auth === 'Bearer SECRET'));
+  assert.ok(calls.every((c) => c.token === 'SECRET'), 'token sent as access_token param');
 
   const failing = createInstagramClient({
     userId: 'U', accessToken: 'SECRET', sleep: async () => {},
@@ -110,7 +111,8 @@ function fakeGraph() {
   const calls = [];
   let n = 0;
   const fetchImpl = async (url, init) => {
-    const body = init.body ? Object.fromEntries(init.body) : null;
+    const raw = init.body ? Object.fromEntries(init.body) : null;
+    const body = raw && (({ access_token, ...rest }) => rest)(raw);
     calls.push({ path: url.pathname, method: init.method, body, query: Object.fromEntries(url.searchParams) });
     const json = (o) => ({ ok: true, status: 200, json: async () => o });
     if (url.pathname.endsWith('/media') && init.method === 'POST') return json({ id: `C${++n}` });

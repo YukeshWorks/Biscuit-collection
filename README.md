@@ -10,6 +10,8 @@ This is a frontend starter, not a production payment system. The UI deliberately
 
 `scheduler/` contains an open-source (MIT), self-hosted website that schedules and automatically publishes Instagram posts through Meta's official Content Publishing API. See [scheduler/README.md](scheduler/README.md).
 
+**Schedule a post:** [open the Instagram post form](https://github.com/YukeshWorks/Biscuit-collection/issues/new?template=instagram-post.yml). GitHub Actions publishes it at your time, for free, once the `IG_USER_ID` and `IG_ACCESS_TOKEN` secrets are set.
+
 ## Run locally
 
 Open `index.html` in a modern browser, or run a local static server:

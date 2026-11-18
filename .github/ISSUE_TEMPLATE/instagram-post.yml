@@ -1,0 +1,46 @@
+name: Instagram post
+description: Schedule a photo post, Reel, carousel or Story for Instagram. It publishes automatically at the time you set.
+title: "Instagram: "
+labels: ["instagram"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fill this in and press **Create**. The scheduler checks every 15 minutes, publishes at your time, then comments the Instagram link and closes this issue.
+        Only issues opened by the repository owner or collaborators are ever published.
+  - type: dropdown
+    id: placement
+    attributes:
+      label: Where should it go?
+      options:
+        - Feed (photo, Reel or carousel)
+        - Story
+      default: 0
+    validations:
+      required: true
+  - type: input
+    id: when
+    attributes:
+      label: When should it go live?
+      description: Date and 24-hour time, like 2026-11-20 18:30. Type now to publish within a few minutes.
+      placeholder: 2026-11-20 18:30
+    validations:
+      required: true
+  - type: input
+    id: timezone
+    attributes:
+      label: Time zone
+      description: A time zone name like Asia/Kolkata or Europe/London. Leave empty to use the repository default (the IG_TIMEZONE variable, otherwise UTC).
+      placeholder: Asia/Kolkata
+  - type: textarea
+    id: media
+    attributes:
+      label: Photos or videos
+      description: Drag JPEG photos or MP4/MOV videos in here, in posting order. One video makes a Reel, 2–10 items make a carousel, and a Story takes exactly one.
+    validations:
+      required: true
+  - type: textarea
+    id: caption
+    attributes:
+      label: Caption
+      description: Up to 2,200 characters, 30 hashtags and 20 @mentions. Stories don't show captions.

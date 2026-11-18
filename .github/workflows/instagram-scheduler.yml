@@ -1,0 +1,72 @@
+# Publishes Instagram posts queued as issues (template: "Instagram post").
+# Setup: add repository secrets IG_USER_ID and IG_ACCESS_TOKEN. Optional repository
+# variables: IG_TIMEZONE (e.g. Asia/Kolkata), IG_GRAPH_HOST (graph.instagram.com by default).
+# Without the secrets it runs in dry run and only checks your posts.
+name: Instagram scheduler
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *" # every 15 minutes
+  workflow_dispatch:
+  issues:
+    types: [opened, edited, reopened, unlabeled]
+
+permissions:
+  contents: write # saves the renewed (encrypted) token to the instagram-state branch
+  issues: write
+
+concurrency:
+  group: instagram-scheduler
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event_name != 'issues' || contains(github.event.issue.labels.*.name, 'instagram')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the scheduler
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: scheduler
+          persist-credentials: false
+
+      - name: Load saved token state
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: instagram-state
+          path: instagram-state
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Publish due posts
+        run: |
+          mkdir -p instagram-state
+          node scheduler/github/run.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STATE_DIR: ${{ github.workspace }}/instagram-state
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_GRAPH_HOST: ${{ vars.IG_GRAPH_HOST }}
+          IG_TIMEZONE: ${{ vars.IG_TIMEZONE }}
+
+      - name: Save token state
+        if: always()
+        working-directory: instagram-state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f token.json ] || { echo "No token state to save."; exit 0; }
+          [ -d .git ] || git init -q -b instagram-state
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add token.json
+          if git diff --cached --quiet; then echo "Token state unchanged."; exit 0; fi
+          git commit -qm "Update encrypted Instagram token state"
+          AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c http.extraheader="AUTHORIZATION: basic $AUTH" push -q "https://github.com/${GITHUB_REPOSITORY}.git" HEAD:instagram-state

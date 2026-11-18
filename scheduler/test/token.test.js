@@ -91,3 +91,16 @@ test('does nothing for Facebook Login hosts', () =>
     assert.equal(fetchImpl.calls.length, 0);
     assert.equal(m.status().autoRenew, false);
   }));
+
+test('encrypt: renewed token is stored sealed and reloads with the same env token only', () =>
+  withDir(async (dir) => {
+    const fetchImpl = fakeFetch([{ access_token: 'RENEWED-SECRET', expires_in: 5184000 }]);
+    const m = await createTokenManager({ envToken: 'ENV-SECRET', host: 'graph.instagram.com', dataDir: dir, fetchImpl, encrypt: true, log: quiet });
+    await m.check();
+    const raw = await readFile(join(dir, 'token.json'), 'utf8');
+    assert.ok(!raw.includes('RENEWED-SECRET') && !raw.includes('ENV-SECRET'), 'no plaintext token on disk');
+    assert.ok(JSON.parse(raw).sealed);
+    const seen = [];
+    await createTokenManager({ envToken: 'ENV-SECRET', host: 'graph.instagram.com', dataDir: dir, fetchImpl, encrypt: true, onToken: (t) => seen.push(t), log: quiet });
+    assert.deepEqual(seen, ['RENEWED-SECRET']);
+  }));
